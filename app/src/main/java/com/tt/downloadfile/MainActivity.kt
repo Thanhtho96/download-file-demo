@@ -54,7 +54,9 @@ class MainActivity : AppCompatActivity() {
                 var outputStream: OutputStream? = null
                 try {
                     withContext(Dispatchers.IO) {
-                        response = client.newCall(request).execute()
+                        if (isActive) {
+                            response = client.newCall(request).execute()
+                        }
                     }
                     // if don't find file available contentLength will return -1
                     if (response?.body?.contentLength()!! > 0) {
@@ -73,6 +75,7 @@ class MainActivity : AppCompatActivity() {
                         // Wow kotlin
                         withContext(Dispatchers.IO) {
                             while (inputStream.read(data).also { readBytes = it } != -1) {
+                                ensureActive()
                                 total += readBytes
                                 outputStream.write(data, 0, readBytes)
                                 progressBar.progress = (total / file_size!! * 100).toInt()
