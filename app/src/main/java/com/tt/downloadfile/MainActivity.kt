@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.tt.downloadfile.databinding.ActivityMainBinding
 import com.tt.downloadfile.viewmodel.DownloadViewModel
+import kotlinx.coroutines.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -19,6 +20,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private val downloadViewModel: DownloadViewModel by viewModel()
+    private var downloadJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -41,21 +43,25 @@ class MainActivity : AppCompatActivity() {
             btnDownload.isEnabled = false
             val fileName = edtUserName.text.toString()
 
-            Thread {
+            downloadJob = CoroutineScope(Dispatchers.IO).launch {
                 val client = OkHttpClient()
                 val request = Request.Builder()
                     .url("https://handsomeman.herokuapp.com/api/jobs/downloadFile/$fileName")
                     .addHeader("Authorization", token)
                     .build()
-                val response: Response
+                var response: Response? = null
+                var inputStream: InputStream? = null
+                var outputStream: OutputStream? = null
                 try {
-                    response = client.newCall(request).execute()
+                    withContext(Dispatchers.IO) {
+                        response = client.newCall(request).execute()
+                    }
                     // if don't find file available contentLength will return -1
-                    if (response.body?.contentLength()!! > 0) {
-                        val file_size: Long? = response.body?.contentLength()
-                        val inputStream =
-                            BufferedInputStream(response.body?.byteStream())
-                        val stream: OutputStream = FileOutputStream(
+                    if (response?.body?.contentLength()!! > 0) {
+                        val file_size: Long? = response?.body?.contentLength()
+                        inputStream =
+                            BufferedInputStream(response?.body?.byteStream())
+                        outputStream = FileOutputStream(
                             getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS).toString() + "/$fileName"
                         )
                         val data = ByteArray(8192)
@@ -65,34 +71,39 @@ class MainActivity : AppCompatActivity() {
                         // below code in java:
                         // while ( (read_bytes = inputStream.read(data)) != -1 )
                         // Wow kotlin
-                        while (inputStream.read(data).also { readBytes = it } != -1) {
-                            total += readBytes
-                            stream.write(data, 0, readBytes)
-                            progressBar.progress = (total / file_size!! * 100).toInt()
-                        }
-                        stream.flush()
-                        stream.close()
-                        response.body?.close()
-                        progressBar.progress = 0
-                    } else {
-                        runOnUiThread {
-                            run {
-                                Toast.makeText(this, "This file not available", Toast.LENGTH_SHORT)
-                                    .show()
+                        withContext(Dispatchers.IO) {
+                            while (inputStream.read(data).also { readBytes = it } != -1) {
+                                total += readBytes
+                                outputStream.write(data, 0, readBytes)
+                                progressBar.progress = (total / file_size!! * 100).toInt()
                             }
                         }
-                    }
-
-                    runOnUiThread {
-                        run {
-                            btnDownload.isEnabled = true
-                            progressBar.visibility = View.GONE
+                        progressBar.progress = 0
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                    this@MainActivity,
+                                    "This file not available",
+                                    Toast.LENGTH_SHORT
+                                )
+                                .show()
                         }
+                    }
+                    withContext(Dispatchers.Main) {
+                        btnDownload.isEnabled = true
+                        progressBar.visibility = View.GONE
                     }
                 } catch (e: IOException) {
                     e.printStackTrace()
+                } finally {
+                    withContext(Dispatchers.IO) {
+                        response?.body?.close()
+                        inputStream?.close()
+                        outputStream?.flush()
+                        outputStream?.close()
+                    }
                 }
-            }.start()
+            }
         }
     }
 
@@ -134,5 +145,11 @@ class MainActivity : AppCompatActivity() {
         } catch (e: IOException) {
             false
         }
+    }
+
+    override fun onDestroy() {
+        downloadJob?.cancel()
+        Log.d("Destroy", "It's destroy")
+        super.onDestroy()
     }
 }
