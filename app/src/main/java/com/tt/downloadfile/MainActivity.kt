@@ -1,19 +1,20 @@
 package com.tt.downloadfile
 
-import android.os.AsyncTask
 import android.os.Bundle
 import android.os.Environment
 import android.util.Log
+import android.view.View
 import android.widget.ProgressBar
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.tt.downloadfile.databinding.ActivityMainBinding
 import com.tt.downloadfile.viewmodel.DownloadViewModel
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
 import okhttp3.ResponseBody
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import java.io.*
-import java.net.URL
-import java.net.URLConnection
-
 
 class MainActivity : AppCompatActivity() {
 
@@ -25,8 +26,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        val edtUserName = binding.username
 
-        var token: String? =
+        val token =
             "Bearer eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjE1OTI0NjI4OTIsInVzZXJuYW1lIjoidGhhbmhiYXQ5NkBnbWFpbC5jb20ifQ.oT9Nu8CaHJWX4HdqeM9XA_x9LB_lMW_3Gv3y-CbrEOY"
 
         binding.buttonLogin.setOnClickListener {
@@ -34,45 +36,61 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.buttonDownload.setOnClickListener {
-            object : AsyncTask<String?, Int?, String?>() {
-                override fun onPreExecute() {
-                    progressBar = binding.progressHorizontal
-                    progressBar.max = 100
-                }
+            progressBar = binding.progressHorizontal
+            progressBar.max = 100
+            progressBar.visibility = View.VISIBLE
+            val fileName = edtUserName.text.toString()
 
-                override fun doInBackground(vararg params: String?): String? {
-                    var url: URL = URL(params[0])
-                    var con: URLConnection = url.openConnection()
-                    con.connect()
-                    var fileLeng = con.contentLength
-                    var filePath =
-                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).path
+            Thread {
+                val client = OkHttpClient()
+                val request = Request.Builder()
+                    .url("https://handsomeman.herokuapp.com/api/jobs/downloadFile/$fileName")
+                    .addHeader("Authorization", token)
+                    .build()
+                val response: Response
+                try {
+                    response = client.newCall(request).execute()
+                    // if don't find file available contentLength will return -1
+                    if (response.body?.contentLength()!! > 0) {
+                        val file_size: Long? = response.body?.contentLength()
+                        val inputStream =
+                            BufferedInputStream(response.body?.byteStream())
+                        val stream: OutputStream = FileOutputStream(
+                            getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS).toString() + "/Annotation 2020-03-10 021514.png"
+                        )
+                        val data = ByteArray(8192)
+                        var total = 0f
+                        var readBytes: Int
 
-                    var inputStream = BufferedInputStream(url.openStream())
-                    var outputStream =
-                            FileOutputStream("/storage/emulated/0/Android/data/com.tt.downloadfile/files/Download" + "/Annotation 2020-03-10 021514.png")
-                    val data = ByteArray(1024)
-                    var total = 0
-                    var count: Int
-                    while (inputStream.read(data).also { count = it } !== -1) {
-                        total += count
-                        publishProgress(total * 100 / fileLeng)
-                        outputStream.write(data, 0, count)
+                        // below code in java:
+                        // while ( (read_bytes = inputStream.read(data)) != -1 )
+                        // Wow kotlin
+                        while (inputStream.read(data).also { readBytes = it } != -1) {
+                            total += readBytes
+                            stream.write(data, 0, readBytes)
+                            progressBar.progress = (total / file_size!! * 100).toInt()
+                        }
+                        stream.flush()
+                        stream.close()
+                        response.body?.close()
+                    } else {
+                        runOnUiThread {
+                            run {
+                                Toast.makeText(this, "This file not available", Toast.LENGTH_SHORT)
+                                    .show()
+                            }
+                        }
                     }
 
-                    outputStream.flush()
-                    outputStream.close()
-                    inputStream.close()
-                    return null
+                    runOnUiThread {
+                        run {
+                            progressBar.visibility = View.GONE
+                        }
+                    }
+                } catch (e: IOException) {
+                    e.printStackTrace()
                 }
-
-                override fun onProgressUpdate(vararg values: Int?) {
-                    super.onProgressUpdate(*values)
-                    values[0]?.let { it1 -> progressBar.setProgress(it1) }
-                }
-            }.execute("https://handsomeman.herokuapp.com/api/jobs/downloadFile/Annotation%202020-03-10%20021514.png")
-//                val writtenToDisk: Boolean = writeResponseBodyToDisk(response)
-//                Toast.makeText(this, "Download", Toast.LENGTH_SHORT).show()
+            }.start()
         }
     }
 
