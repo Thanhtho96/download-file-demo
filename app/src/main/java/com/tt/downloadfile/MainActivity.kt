@@ -4,7 +4,6 @@ import android.os.Bundle
 import android.os.Environment
 import android.util.Log
 import android.view.View
-import android.widget.ProgressBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.tt.downloadfile.databinding.ActivityMainBinding
@@ -20,13 +19,15 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private val downloadViewModel: DownloadViewModel by viewModel()
-    private lateinit var progressBar: ProgressBar
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         val edtUserName = binding.username
+        val progressBar = binding.progressHorizontal
+        val btnDownload = binding.buttonDownload
+        progressBar.max = 100
 
         val token =
             "Bearer eyJhbGciOiJIUzI1NiJ9.eyJleHAiOjE1OTI0NjI4OTIsInVzZXJuYW1lIjoidGhhbmhiYXQ5NkBnbWFpbC5jb20ifQ.oT9Nu8CaHJWX4HdqeM9XA_x9LB_lMW_3Gv3y-CbrEOY"
@@ -35,10 +36,9 @@ class MainActivity : AppCompatActivity() {
             Log.d("dir", getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS).toString())
         }
 
-        binding.buttonDownload.setOnClickListener {
-            progressBar = binding.progressHorizontal
-            progressBar.max = 100
+        btnDownload.setOnClickListener {
             progressBar.visibility = View.VISIBLE
+            btnDownload.isEnabled = false
             val fileName = edtUserName.text.toString()
 
             Thread {
@@ -56,7 +56,7 @@ class MainActivity : AppCompatActivity() {
                         val inputStream =
                             BufferedInputStream(response.body?.byteStream())
                         val stream: OutputStream = FileOutputStream(
-                            getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS).toString() + "/Annotation 2020-03-10 021514.png"
+                            getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS).toString() + "/$fileName"
                         )
                         val data = ByteArray(8192)
                         var total = 0f
@@ -73,6 +73,7 @@ class MainActivity : AppCompatActivity() {
                         stream.flush()
                         stream.close()
                         response.body?.close()
+                        progressBar.progress = 0
                     } else {
                         runOnUiThread {
                             run {
@@ -84,6 +85,7 @@ class MainActivity : AppCompatActivity() {
 
                     runOnUiThread {
                         run {
+                            btnDownload.isEnabled = true
                             progressBar.visibility = View.GONE
                         }
                     }
