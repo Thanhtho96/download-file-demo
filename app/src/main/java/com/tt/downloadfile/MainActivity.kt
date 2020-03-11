@@ -21,6 +21,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val downloadViewModel: DownloadViewModel by viewModel()
     private var downloadJob: Job? = null
+    private var map: HashMap<String, Long> = HashMap()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,6 +59,10 @@ class MainActivity : AppCompatActivity() {
                             response = client.newCall(request).execute()
                         }
                     }
+                    map.put(
+                        getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS).toString() + "/$fileName",
+                        response?.body?.contentLength()!!
+                    )
                     // if don't find file available contentLength will return -1
                     if (response?.body?.contentLength()!! > 0) {
                         val file_size: Long? = response?.body?.contentLength()
@@ -110,6 +115,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkIfDownloadSuccessful() {
+        for ((fileName, fileLength) in map) {
+            val myFile = File(fileName)
+            if (myFile.exists() && myFile.length() < fileLength) {
+                Log.d("file size", "$fileName has $fileLength bytes")
+                Log.d("file size downloaded", myFile.length().toString() + " bytes")
+                myFile.delete()
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        downloadJob?.cancel()
+        checkIfDownloadSuccessful()
+        Log.d("Destroy", "It's destroy")
+        super.onDestroy()
+    }
+
     private fun writeResponseBodyToDisk(body: ResponseBody): Boolean {
         return try { // todo change the file location/name according to your needs
             val futureStudioIconFile =
@@ -148,11 +171,5 @@ class MainActivity : AppCompatActivity() {
         } catch (e: IOException) {
             false
         }
-    }
-
-    override fun onDestroy() {
-        downloadJob?.cancel()
-        Log.d("Destroy", "It's destroy")
-        super.onDestroy()
     }
 }
